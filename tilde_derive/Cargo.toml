@@ -1,0 +1,15 @@
+[package]
+name = "tilde_derive"
+version = "0.0.2"
+authors = ["oooutlk <oooutlk@outlook.com>"]
+license = "MIT"
+keywords = [ "syntax", "sugar", "postfix", "macro", "custom" ]
+readme = "README.md"
+repository = "https://github.com/oooutlk/tilde"
+documentation = "https://docs.rs/tilde"
+categories = [ "rust-patterns" ]
+edition = "2018"
+description = "Using ~ to provide syntax sugar for Rust."
+
+[dev-dependencies]
+tilde = "^0.0.2"
