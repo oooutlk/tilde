@@ -1,18 +1,42 @@
 // See the COPYRIGHT file at the top-level directory of this distribution.
 // Licensed under MIT license<LICENSE-MIT or http://opensource.org/licenses/MIT>
 
+//! This `tilde` crate utilizes the disused tilde operator `~` to generate
+//! syntatic sugar for Rust program.
+//! # Features
+//! 
+//! 1. Postfix macro. The syntax is `first_arg.~the_macro!(rest_args)`, which will
+//! be desugared as `the_macro!( first_arg, rest_args )`.
+//! 
+//! More features will be added in the future.
+//! 
+//! # License
+//! 
+//! Licensed under MIT.
+
 extern crate proc_macro;
-use self::proc_macro::{Punct,Spacing,TokenStream,TokenTree};
+use self::proc_macro::{Delimiter,Group,Ident,Punct,
+    Spacing,Span,TokenStream,TokenTree};
+
+use std::iter::once;
 
 #[proc_macro]
 pub fn tilde( input: TokenStream ) -> TokenStream {
-    enum Expect { Obj, Tilde, Ident, Bang, Group }
+    enum Expect { Obj, Tilde, Method, Bang, Group }
 
     struct State {
         expect : Expect,
+        obj    : Option<TokenStream>,
         method : Option<TokenStream>,
         acc    : TokenStream,
-        obj    : Option<TokenStream>,
+    }
+
+    fn opt_ts_extend( opt_ts: &mut Option<TokenStream>, tt: TokenTree ) {
+        if let Some( ref mut ts ) = opt_ts.as_mut() {
+            ts.extend( once( tt ));
+        } else {
+            *opt_ts = Some( TokenStream::from( tt ));
+        }
     }
 
     impl State {
@@ -23,85 +47,109 @@ pub fn tilde( input: TokenStream ) -> TokenStream {
             }
         }
 
-        fn append_obj( &mut self, ts: TokenStream ) {
-            if let Some( ref mut obj ) = self.obj {
-                obj.extend( ts );
-            } else {
-                self.obj = Some( ts );
-            }
+        fn acc_extend( &mut self, tt: TokenTree ) {
+            self.acc.extend( once( tt ));
+        }
+
+        fn obj_extend( &mut self, tt: TokenTree ) {
+            opt_ts_extend( &mut self.obj, tt );
+        }
+
+        fn method_extend( &mut self, tt: TokenTree ) {
+            opt_ts_extend( &mut self.method, tt );
         }
 
         fn next( &mut self ) {
             self.expect = match self.expect {
-                Expect::Obj   => Expect::Tilde,
-                Expect::Tilde => Expect::Ident,
-                Expect::Ident => Expect::Bang,
-                Expect::Bang  => Expect::Group,
-                Expect::Group => Expect::Obj,
+                Expect::Obj    => Expect::Tilde,
+                Expect::Tilde  => Expect::Method,
+                Expect::Method => Expect::Bang,
+                Expect::Bang   => Expect::Group,
+                Expect::Group  => Expect::Obj,
             };
         }
     }
 
-    trait ToTS {
-        fn to_ts( self ) -> TokenStream;
+    trait TT {
+        fn tt( self ) -> TokenTree;
     }
 
-    impl ToTS for char {
-        fn to_ts( self ) -> TokenStream {
-            TokenStream::from( TokenTree::Punct(
-                Punct::new( self, Spacing::Alone )))
+    impl TT for char {
+        fn tt( self ) -> TokenTree {
+            TokenTree::Punct( Punct::new( self, Spacing::Alone ))
         }
     }
 
-    fn define_tilde( input: TokenStream ) -> TokenStream {
-        use proc_macro::{TokenTree,Group};
+    impl TT for &'static str {
+        fn tt( self ) -> TokenTree {
+            TokenTree::Ident( Ident::new( self, Span::call_site() ))
+        }
+    }
 
+    fn punct( s: &'static str  ) -> impl Iterator<Item=TokenTree> {
+        s.chars().map( |ch|
+            TokenTree::Punct( Punct::new( ch, Spacing::Joint ))
+        )
+    }
+
+    fn define_tilde( input: TokenStream ) -> TokenStream {
         let mut state = State {
             expect : Expect::Obj,
+            obj    : None,
             method : None,
             acc    : TokenStream::new(),
-            obj    : None,
         };
 
         for tt in input {
             match state.expect {
                 Expect::Obj => match tt {
-                    TokenTree::Punct( ref punct ) => {
-                        if punct.as_char() == '.' {
-                            state.next();
-                        } else {
+                    TokenTree::Punct( ref punct ) => match punct.as_char() {
+                        '.' => state.next(),
+                        '(' | '[' | ':' => {
+                            state.obj_extend( tt );
+                        },
+                        _ => {
                             state.reset_obj();
-                            state.acc.extend( TokenStream::from( tt ));
-                        }
+                            state.acc_extend( tt );
+                        },
                     },
                     TokenTree::Group( group ) => {
-                        state.append_obj( TokenStream::from(
-                            TokenTree::Group( Group::new(
-                                group.delimiter(),
-                                define_tilde( group.stream() )))));
+                        state.obj_extend( TokenTree::Group( Group::new(
+                            group.delimiter(),
+                            define_tilde( group.stream() ))));
                     },
-                    _ => state.append_obj( TokenStream::from( tt )),
+                    _ => state.obj_extend( tt ),
                 },
                 Expect::Tilde => match tt {
                     TokenTree::Punct( ref punct ) if punct.as_char() == '~' => {
                         state.next();
                     },
+                    TokenTree::Ident(_) => {
+                        state.obj_extend( '.'.tt() );
+                        state.obj_extend( tt );
+                        state.expect = Expect::Obj;
+                    },
                     _ => {
                         state.reset_obj();
-                        state.acc.extend( '.'.to_ts() );
-                        state.acc.extend( TokenStream::from( tt ));
+                        state.acc_extend( '.'.tt() );
+                        state.acc_extend( tt );
                     }
                 },
-                Expect::Ident => match tt {
+                Expect::Method => match tt {
                     TokenTree::Ident(_) => {
                         state.method = Some( TokenStream::from( tt ));
                         state.next();
                     },
+                    TokenTree::Group( group ) => { // unreachable arm
+                        state.method_extend( TokenTree::Group( Group::new(
+                            group.delimiter(),
+                            define_tilde( group.stream() ))));
+                    },
                     _ => {
                         state.reset_obj();
-                        state.acc.extend( '.'.to_ts() );
-                        state.acc.extend( '~'.to_ts() );
-                        state.acc.extend( TokenStream::from( tt ));
+                        state.acc_extend( '.'.tt() );
+                        state.acc_extend( '~'.tt() );
+                        state.acc_extend( tt );
                     }
                 },
                 Expect::Bang => match tt {
@@ -112,48 +160,57 @@ pub fn tilde( input: TokenStream ) -> TokenStream {
                         state.reset_obj();
                         let method = state.method.take()
                             .expect("The last tt should be some identity");
-                        state.acc.extend( '.'.to_ts() );
-                        state.acc.extend( '~'.to_ts() );
+                        state.acc_extend( '.'.tt() );
+                        state.acc_extend( '~'.tt() );
                         state.acc.extend( method );
-                        state.acc.extend( TokenStream::from( tt ));
+                        state.acc_extend( tt );
                     }
                 },
                 Expect::Group => match tt {
                     TokenTree::Group( group ) => {
-                        let obj = state.obj.take()
-                            .expect("The state should have got some obj");
-                        let method = state.method.take()
+                        let mut prefixed = state.method.take()
                             .expect("The state should have got some method");
-                        let mut new_obj = TokenStream::new();
-                        new_obj.extend( method );
-                        new_obj.extend( '!'.to_ts() );
+                        prefixed.extend( once( '!'.tt() ));
 
-                        let mut inner = obj;
+                        let self_ = "__tilde_postfix_macro_self__".tt();
+
+                        let mut inner = TokenStream::from( self_.clone() );
+
                         let delimiter = group.delimiter();
                         if !group.stream().is_empty() {
-                            let args = TokenStream::from(
-                                TokenTree::Group( Group::new(
-                                    delimiter,
-                                    define_tilde( group.stream() )
-                            )));
-                            inner.extend( ','.to_ts() );
-                            inner.extend( args );
+                            let args = TokenTree::Group( Group::new(
+                                delimiter,
+                                define_tilde( group.stream() )
+                            ));
+                            inner.extend( once( ','.tt() ));
+                            inner.extend( once( args ));
                         }
                         let group = Group::new( delimiter, inner );
-                        new_obj.extend( TokenStream::from(
-                            TokenTree::Group( group )));
+                        prefixed.extend( once( TokenTree::Group( group )));
 
-                        state.obj = Some( new_obj );
+                        let mut match_body = TokenStream::from( self_ );
+                        match_body.extend( punct( "=>" ));
+                        match_body.extend( prefixed );
+
+                        let mut match_ = TokenStream::from( "match".tt() );
+                        match_.extend( state.obj.take()
+                            .expect("The state should have got some obj"));
+                        match_.extend( once( TokenTree::Group(
+                            Group::new( Delimiter::Brace, match_body ))));
+
+                        state.obj = Some( match_ );
                         state.next();
                     },
                     _ => {
+                        // I don't know who uses `.~ident!` syntax without a
+                        // group. Leave it as is.
                         state.reset_obj();
                         let method = state.method.take()
                             .expect("The state should have got some method!");
-                        state.acc.extend( '.'.to_ts() );
-                        state.acc.extend( '~'.to_ts() );
+                        state.acc_extend( '.'.tt() );
+                        state.acc_extend( '~'.tt() );
                         state.acc.extend( method );
-                        state.acc.extend( TokenStream::from( tt ));
+                        state.acc_extend( tt );
                     }
                 }
             }
