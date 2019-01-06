@@ -1,6 +1,6 @@
 [package]
 name = "tilde"
-version = "0.0.3"
+version = "0.0.4"
 authors = ["oooutlk <oooutlk@outlook.com>"]
 license = "MIT"
 keywords = [ "syntax", "sugar", "postfix", "macro", "custom" ]

@@ -9,7 +9,7 @@ mod test {
         ($e:expr) => { $e + 1 }
     }
 
-    tilde! { mod unary {
+    tilde! { mod unary_macro {
         pub fn basic( i: i32 ) -> i32 { i.~inc!() }
         pub fn method( i: i32 ) -> i32 { i.clone().~inc!() }
         pub fn func( i: i32 ) -> i32 { Clone::clone( &i ).~inc!() }
@@ -23,8 +23,8 @@ mod test {
     }}
 
     #[test]
-    fn test_unary() {
-        use self::unary::*;
+    fn test_unary_macro() {
+        use self::unary_macro::*;
         assert_eq!( basic(  0 ), 1  );
         assert_eq!( method( 1 ), 2  );
         assert_eq!( func(   2 ), 3  );
@@ -35,7 +35,7 @@ mod test {
         ( $lhs:expr, $rhs:expr ) => { $lhs + $rhs }
     }
 
-    tilde! { mod binary {
+    tilde! { mod binary_macro {
         pub fn basic( i: i32 ) -> i32 { i.~add!(i) }
         pub fn method( i: i32 ) -> i32 { i.clone().~add!(i) }
         pub fn func( i: i32 ) -> i32 { Clone::clone( &i ).~add!(i) }
@@ -49,8 +49,8 @@ mod test {
     }}
 
     #[test]
-    fn test_binary() {
-        use self::binary::*;
+    fn test_binary_macro() {
+        use self::binary_macro::*;
         assert_eq!( basic(  0 ),  0 );
         assert_eq!( method( 1 ),  2 );
         assert_eq!( func(   2 ),  4 );
@@ -81,5 +81,81 @@ tilde_derive/src/lib.rs:72: value: "hello"
 tilde_derive/src/lib.rs:72: len: 5"#
             );
         }
+    }
+
+    tilde! { mod unary_fn {
+        fn inc( i: i32 ) -> i32 { i + 1 }
+
+        pub fn basic( i: i32 ) -> i32 { i.~inc() }
+        pub fn method( i: i32 ) -> i32 { i.clone().~inc() }
+        pub fn func( i: i32 ) -> i32 { Clone::clone( &i ).~inc() }
+        pub fn misc( i: i32 ) -> i32 {
+            (   i
+              + i.clone().~inc()
+              + i.~inc().clone().~inc()
+              + i.~inc().clone().~inc().clone().~inc()
+            ).~inc()
+        }
+    }}
+
+    #[test]
+    fn test_unary_fn() {
+        use self::unary_fn::*;
+
+        assert_eq!( basic(  0 ), 1  );
+        assert_eq!( method( 1 ), 2  );
+        assert_eq!( func(   2 ), 3  );
+        assert_eq!( misc(   3 ), 19 );
+    }
+
+    pub fn add( i: i32, j: i32 ) -> i32 { i+j }
+
+    tilde! { mod binary_fn {
+        use super::add;
+
+        pub fn basic( i: i32 ) -> i32 { i.~add(i) }
+        pub fn method( i: i32 ) -> i32 { i.clone().~add(i) }
+        pub fn func( i: i32 ) -> i32 { Clone::clone( &i ).~add(i) }
+        pub fn misc( i: i32 ) -> i32 {
+            (   i
+              + i.clone().~add(i)
+              + i.~add(i).clone().~add(i)
+              + i.~add(i).clone().~add(i).clone().~add(i)
+            ).~add(i)
+        }
+    }}
+
+    #[test]
+    fn test_binary_fn() {
+        use self::binary_fn::*;
+        assert_eq!( basic(  0 ),  0 );
+        assert_eq!( method( 1 ),  2 );
+        assert_eq!( func(   2 ),  4 );
+        assert_eq!( misc(   3 ), 33 );
+    }
+
+    tilde! { mod binary_macro_and_fn {
+        use super::add;
+
+        pub fn basic( i: i32 ) -> i32 { i.~add!(i).~add(i) }
+        pub fn method( i: i32 ) -> i32 { i.clone().~add!(i).~add(i) }
+        pub fn func( i: i32 ) -> i32 { Clone::clone( &i ).~add!(i).~add(i) }
+        pub fn misc( i: i32 ) -> i32 {
+            (   i
+              + i.~add!(i).clone().~add!(i).~add(i)
+              + i.~add!(i).~add(i).~add!(i).clone().~add!(i).~add(i)
+              + i.~add!(i).~add(i).~add!(i).clone().~add!(i).~add(i).~add!(i).clone().~add(i)
+            ).~add(i)
+        }
+    }}
+
+    #[test]
+    fn test_binary_macro_and_fn() {
+        use self::binary_macro_and_fn::*;
+
+        assert_eq!( basic(  0 ),  0 );
+        assert_eq!( method( 1 ),  3 );
+        assert_eq!( func(   2 ),  6 );
+        assert_eq!( misc(   3 ), 60 );
     }
 }

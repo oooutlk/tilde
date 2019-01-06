@@ -13,7 +13,7 @@ be desugared as `the_macro!( first_arg, rest_args )`. As proposed in
 ## Example: Postfix macro
 
   ```rust
-      macro_rules! inc { ($e:expr) => { $e+1 }}
+  macro_rules! inc { ($e:expr) => { $e+1 }}
   ```
 
   Suppose `i: i32`, The library user could write: `i.~inc!()`,
@@ -50,6 +50,19 @@ be desugared as `the_macro!( first_arg, rest_args )`. As proposed in
       }
   }
   ```
+
+2. Postfix function. The syntax is `first_arg.~the_fn(rest_args)`, which will
+be desugared as `the_fn!( first_arg, rest_args )`.
+
+## Example: Postfix function
+
+  ```rust
+  fn inc( i: i32 ) -> i32 { i + 1 }
+  ```
+
+  Suppose `i: i32`, The library user could write: `i.~inc()`,
+  `i.clone().~inc()` etc,  which is a sugar as `inc( i )` and
+  `inc( i.clone() )`.
 
 More features will be added in the future.
 

@@ -1,6 +1,6 @@
 [package]
 name = "tilde_derive"
-version = "0.0.3"
+version = "0.0.4"
 authors = ["oooutlk <oooutlk@outlook.com>"]
 license = "MIT"
 keywords = [ "syntax", "sugar", "postfix", "macro", "custom" ]
@@ -12,4 +12,4 @@ edition = "2018"
 description = "Using ~ to provide syntax sugar for Rust."
 
 [dev-dependencies]
-tilde = "0.0.3"
+tilde = "0.0.4"
